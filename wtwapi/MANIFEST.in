@@ -1,0 +1,3 @@
+graft wtwapi/templates
+graft wtwapi/static
+include wtwapi/schema.sql
