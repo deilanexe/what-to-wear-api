@@ -28,6 +28,8 @@ class wtwapiTestCase(unittest.TestCase):
             assert b'No entries here so far' in rv.data
             rv = self.app.get('/garment_types')
             assert b'No entries here so far' in rv.data
+            rv = self.app.get('/combos')
+            assert b'No entries here so far' in rv.data
 
     # tests over garment brands
 
@@ -105,6 +107,29 @@ class wtwapiTestCase(unittest.TestCase):
             rmess = self.app.post('/garment_type', data=data)
             assert rmess.status_code == 201
             rv2 = self.app.get('/garment_types')
+            assert b'Found 1 entries' in rv2.data
+
+    # tests over garment combos table
+
+    def test__adding_a_new_combo(self):
+        from datetime import datetime
+        with wtwapi.app.app_context():
+            rv = self.app.get('/combos')
+            assert b'No entries here so far' in rv.data
+            data = dict(
+                    used_on=datetime(2014, 12, 17),
+                    head_id=0,
+                    upper_cov_id=0,
+                    upper_ext_id=0,
+                    upper_int_id=0,
+                    lower_ext_id=0,
+                    lower_acc_id=0,
+                    foot_int_id=0,
+                    foot_ext_id=0
+                    )
+            rmess = self.app.post('/combo', data=data)
+            assert rmess.status_code == 201
+            rv2 = self.app.get('/combos')
             assert b'Found 1 entries' in rv2.data
 
 

@@ -10,6 +10,7 @@ from db_classes import base
 from db_classes.garment import Garment
 from db_classes.garment_brand import GarmentBrand
 from db_classes.garment_type import GarmentType
+from db_classes.combos import Combo
 
 
 app = Flask(__name__)
@@ -165,6 +166,68 @@ def add_garment_type():
                 return jsonify ({'message': "Garment Type Created Successfully!!!", 'status': 201}), 201
             return jsonify({'message': 'ERROR: Garment Type name already exists!', 'status': 200}), 200
         return jsonify({'message': 'ERROR: Garment Type name not provided!', 'status': 200}), 200
+    except Exception as e:
+        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+
+
+@app.route('/combos', methods=['GET'])
+def get_garments_for_combos():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    combos = []
+    results = session.query(Combo).all()
+    session.close()
+    if len(results) == 0:
+        return jsonify({'message': 'No entries here so far'}), 200
+    for item in results:
+        combos.append(dict(
+                used_on=item.used_on,
+                head_id=item.head_id,
+                upper_cov_id=item.upper_cov_id,
+                upper_ext_id=item.upper_ext_id,
+                upper_int_id=item.upper_int_id,
+                lower_ext_id=item.lower_ext_id,
+                lower_acc_id=item.lower_acc_id,
+                foot_int_id=item.foot_int_id,
+                foot_ext_id=item.foot_ext_id
+                ))
+    return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(results))}), 200
+
+
+@app.route('/combo', methods=['POST'])
+def add_combo():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    try:
+        used_on = request.form.get('used_on', None)
+        head_id = request.form.get('head_id', 0)
+        upper_cov_id = request.form.get('upper_cov_id', 0)
+        upper_ext_id = request.form.get('upper_ext_id', 0)
+        upper_int_id = request.form.get('upper_int_id', 0)
+        lower_ext_id = request.form.get('lower_ext_id', 0)
+        lower_acc_id = request.form.get('lower_acc_id', 0)
+        foot_int_id = request.form.get('foot_int_id', 0)
+        foot_ext_id = request.form.get('foot_ext_id', 0)
+        if used_on is not None:
+            session = get_db()
+            results = session.query(Combo).filter_by(used_on=used_on).first()
+            session.close()
+            if results is None:
+                combo = Combo(
+                        used_on, head_id, upper_cov_id, upper_ext_id,
+                        upper_int_id, lower_ext_id, lower_acc_id,
+                        foot_ext_id, foot_int_id
+                        )
+                session = get_db()
+                session.add(combo)
+                session.commit()
+                session.close()
+                return jsonify ({'message': "Combo Created Successfully!!!", 'status': 201}), 201
+            return jsonify({'message': 'ERROR: Combo name already exists!', 'status': 200}), 200
+        return jsonify({'message': 'ERROR: Combo name not provided!', 'status': 200}), 200
     except Exception as e:
         return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
 
