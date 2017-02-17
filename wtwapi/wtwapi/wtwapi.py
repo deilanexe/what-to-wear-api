@@ -11,6 +11,7 @@ from db_classes.garment import Garment
 from db_classes.garment_brand import GarmentBrand
 from db_classes.garment_type import GarmentType
 from db_classes.combos import Combo
+from db_classes.use_in_combo import UseInCombo
 
 
 app = Flask(__name__)
@@ -80,6 +81,28 @@ def get_garments():
     for item in results:
         garments.append({'id': item.garment_id})
     return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(results))})
+
+
+@app.route('/garment', methods=['POST'])
+def add_garment():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    try:
+        garment_type_id = request.form.get('garment_type_id', None)
+        garment_brand_id = request.form.get('garment_brand_id', None)
+        # website_url = request.form.get('website_url', '')
+        if garment_type_id is not None:
+            garment = Garment(garment_type_id, garment_brand_id)
+            session = get_db()
+            session.add(garment)
+            session.commit()
+            session.close()
+            return jsonify ({'message': "Garment Created Successfully!!!", 'status': 201}), 201
+        else:
+            return jsonify({'message': 'ERROR: Garment type ID not provided!', 'status': 200}), 200
+    except Exception as e:
+        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 400}), 400
 
 
 @app.route('/brands', methods=['GET'])
@@ -230,6 +253,27 @@ def add_combo():
         return jsonify({'message': 'ERROR: Combo name not provided!', 'status': 200}), 200
     except Exception as e:
         return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+
+
+@app.route('/use_in_combos', methods=['GET'])
+def get_uses_in_combos():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    uses_in_combos = []
+    results = session.query(UseInCombo).all()
+    session.close()
+    if len(results) == 0:
+        return jsonify({'message': 'No entries here so far'}), 200
+    for item in results:
+        uses_in_combos.append(dict(
+                use_in_combo_id=item.use_in_combo_id,
+                use_name=item.use_name,
+                use_description=item.use_description,
+                field_in_db=item.field_in_db
+                ))
+    return jsonify({'results': uses_in_combos, 'message': 'Found {} entries.'.format(len(results))}), 200
 
 
 if __name__ == '__main__':

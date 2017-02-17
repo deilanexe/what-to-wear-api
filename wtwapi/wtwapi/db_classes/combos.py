@@ -21,14 +21,14 @@ class Combo(Base):
             foot_ext_id=0, foot_int_id=0
             ):
         self.used_on = used_on
-        self.head_id = head_id
-        self.upper_cov_id = upper_cov_id
-        self.upper_ext_id = upper_ext_id
-        self.upper_int_id = upper_int_id
-        self.lower_ext_id = lower_ext_id
-        self.lower_acc_id = lower_acc_id
-        self.foot_int_id = foot_int_id
-        self.foot_ext_id = foot_ext_id
+        self.head_id = int(head_id)
+        self.upper_cov_id = int(upper_cov_id)
+        self.upper_ext_id = int(upper_ext_id)
+        self.upper_int_id = int(upper_int_id)
+        self.lower_ext_id = int(lower_ext_id)
+        self.lower_acc_id = int(lower_acc_id)
+        self.foot_int_id = int(foot_int_id)
+        self.foot_ext_id = int(foot_ext_id)
 
     def __repr__(self):
         return '<GarmentCombo(id={}, hid={}, ucid={}, ueid={}, uiid={}, leid={}, laid={}, fiid={}, feid={}; used_on={})>'.format(

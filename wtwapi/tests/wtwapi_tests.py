@@ -30,6 +30,9 @@ class wtwapiTestCase(unittest.TestCase):
             assert b'No entries here so far' in rv.data
             rv = self.app.get('/combos')
             assert b'No entries here so far' in rv.data
+            # The only table that is not empty from init!
+            rv = self.app.get('/use_in_combos')
+            assert b'Found 8 entries' in rv.data
 
     # tests over garment brands
 
@@ -131,6 +134,26 @@ class wtwapiTestCase(unittest.TestCase):
             assert rmess.status_code == 201
             rv2 = self.app.get('/combos')
             assert b'Found 1 entries' in rv2.data
+
+
+    # tests over garment table
+
+    # tests over garment types table
+
+    def test__adding_a_new_garment_type(self):
+        with wtwapi.app.app_context():
+            rv = self.app.get('/garments')
+            assert b'No entries here so far' in rv.data
+            data = dict(
+                    garment_type_id=5,
+                    garment_brand_id=3
+                    )
+            rmess = self.app.post('/garment', data=data)
+            assert rmess.status_code == 201
+            rv2 = self.app.get('/garments')
+            assert b'Found 1 entries' in rv2.data
+
+    # tests pover use_in_combo table
 
 
 if __name__ == '__main__':

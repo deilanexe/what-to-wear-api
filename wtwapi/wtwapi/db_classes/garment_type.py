@@ -12,7 +12,7 @@ class GarmentType(Base):
     def __init__(self, type_name, type_description='', use_in_combo_as=0):
         self.type_name = type_name
         self.type_description = type_description
-        self.use_in_combo_as = use_in_combo_as
+        self.use_in_combo_as = int(use_in_combo_as)
 
     def __repr__(self):
         return '<GarmentType(id={}, type_name={}, type_description={}, use_in_combo_as={})>'.format(

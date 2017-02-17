@@ -1,4 +1,4 @@
-from sqlalchemy import *
+from sqlalchemy import Column, Integer, String, Date
 from base import Base
 
 
@@ -8,20 +8,19 @@ class Garment(Base):
     garment_id = Column(Integer, primary_key=True)
     garment_type_id = Column(Integer)
     garment_brand_id = Column(Integer)
-    garment_color = Column(String(10))
-    garment_secondary_color = Column(String(10))
-    garment_image_url = Column(String(300))
-    last_washed_on = Column(Date)
-    purchased_on = Column(Date)
-    size = Column(String(200))
-    available = Column(Integer)
-    retire_date = Column(Date)
+    # garment_color = Column(String(10))
+    # garment_secondary_color = Column(String(10))
+    # garment_image_url = Column(String(300))
+    # last_washed_on = Column(Date)
+    # purchased_on = Column(Date)
+    # size = Column(String(200))
+    # available = Column(Integer)
+    # retire_date = Column(Date)
 
-    def __init__(self, garment_id, garment_type_id, garment_brand_id):
-        self.garment_id = garment_id
-        self.garment_type_id = garment_type_id
-        self.garment_brand_id = garment_brand_id
+    def __init__(self, garment_type_id, garment_brand_id):
+        self.garment_type_id = int(garment_type_id)
+        self.garment_brand_id = int(garment_brand_id)
 
     def __repr__(self):
         return "<Garment(id='%s', type id='%s', brand id='%s')>" % (
-                self.name, self.fullname, self.password)
+                self.garment_id, self.garment_type_id, self.garment_brand_id)
