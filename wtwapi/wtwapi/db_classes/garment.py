@@ -7,7 +7,7 @@ class Garment(Base):
 
     garment_id = Column(Integer, primary_key=True)
     garment_type_id = Column(Integer, ForeignKey("garment_type.type_id"))
-    garment_brand_id = Column(Integer, ForeignKey('garment_brands.brand_id'))
+    garment_brand_id = Column(Integer)
     garment_color = Column(String(10))
     garment_secondary_color = Column(String(10))
     garment_image_url = Column(String(300))
@@ -18,9 +18,9 @@ class Garment(Base):
     retire_date = Column(Date)
 
     def __init__(
-            self, garment_type_id, garment_brand_id, garment_color,
+            self, garment_type_id, garment_color,
             garment_secondary_color, garment_image_url, last_washed_on,
-            purchased_on
+            purchased_on, garment_brand_id=0
             ):
         self.garment_type_id = int(garment_type_id)
         self.garment_brand_id = int(garment_brand_id)

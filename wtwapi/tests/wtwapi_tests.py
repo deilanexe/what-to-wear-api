@@ -58,7 +58,7 @@ class wtwapiTestCase(unittest.TestCase):
             assert b'No entries here so far' in rv.data
 
 
-    def test__add_two_brands_same_name_fails_only_first_brand_is_inserted(self):
+    def test__adding_two_brands_same_name_fails_only_first_brand_is_inserted(self):
         with wtwapi.app.app_context():
             rv = self.app.get('/brands')
             assert b'No entries here so far' in rv.data
@@ -73,7 +73,7 @@ class wtwapiTestCase(unittest.TestCase):
             assert b'Found 1 entries' in rv2.data
 
 
-    def test__add_three_brands(self):
+    def test__adding_three_brands(self):
         with wtwapi.app.app_context():
             rv = self.app.get('/brands')
             assert b'No entries here so far' in rv.data
@@ -152,6 +152,7 @@ class wtwapiTestCase(unittest.TestCase):
             data = dict(brand_name='Test Brand', website_url='https://www.testbrand.com.au/')
             rmess = self.app.post('/brand', data=data)
             assert rmess.status_code == 201
+            # cannot insert garment without referring to type or brand
             data = dict(
                     garment_type_id=1,
                     garment_brand_id=1,
@@ -162,7 +163,7 @@ class wtwapiTestCase(unittest.TestCase):
                     purchased_on='2016/01/01'
                     )
             rmess = self.app.post('/garment', data=data)
-            # print rmess.data
+            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/garments')
             # print rv2.data
@@ -170,11 +171,38 @@ class wtwapiTestCase(unittest.TestCase):
 
 
     def test__adding_a_new_garment_without_brand(self):
-        pass
+        with wtwapi.app.app_context():
+            print 'test__adding_a_new_garment_without_brand'
+            rv = self.app.get('/garments')
+            assert b'No entries here so far' in rv.data
+            data = dict(
+                    type_name='Test Type',
+                    type_description='Something to wear',
+                    use_in_combo_as=3
+                    )
+            rmess = self.app.post('/garment_type', data=data)
+            assert rmess.status_code == 201
+            # cannot insert garment without referring to type or brand
+            data = dict(
+                    garment_type_id=1,
+                    garment_color='000000',
+                    garment_secondary_color='ffffff',
+                    garment_image_url='/img/test.png',
+                    last_washed_on='2017/01/01',
+                    purchased_on='2016/01/01'
+                    )
+            rmess = self.app.post('/garment', data=data)
+            print rmess.data
+            assert rmess.status_code == 201
+            rv2 = self.app.get('/garments')
+            # print rv2.data
+            assert b'Found 1 entries' in rv2.data
 
     # tests over use_in_combo table
 
     def test__adding_a_new_use_in_combo(self):
+        # is this required???
         pass
+
 if __name__ == '__main__':
     unittest.main()
