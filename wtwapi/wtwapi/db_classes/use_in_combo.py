@@ -10,12 +10,13 @@ class UseInCombo(Base):
     use_description = Column(Text)
     field_in_db = Column(String(50))
 
-    def __init__(self, garment_id, garment_type_id, garment_brand_id):
+    def __init__(self, use_name, use_description, field_in_db):
         self.use_name = use_name
         self.use_description = use_description
         self.field_in_db = field_in_db
 
     def __repr__(self):
-        return "<UseInCombo(id='%s', use_name='%s', use_description='%s', field_in_db={})>".format(
-                self.id, self.use_name, self.use_description, self.field_in_db
+        return "<UseInCombo(id='{}', use_name='{}', use_description='{}', field_in_db={})>".format(
+                self.use_in_combo_id, self.use_name,
+                self.use_description, self.field_in_db
                 )

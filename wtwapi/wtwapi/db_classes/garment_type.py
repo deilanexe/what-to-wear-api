@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from base import Base
 
 class GarmentType(Base):
@@ -7,7 +7,9 @@ class GarmentType(Base):
     type_id = Column(Integer, primary_key=True)
     type_name = Column(String(200))
     type_description = Column(Text)
-    use_in_combo_as = Column(Integer)
+    use_in_combo_as = Column(Integer, ForeignKey(
+            'use_in_combo.use_in_combo_id'
+            ))
 
     def __init__(self, type_name, type_description='', use_in_combo_as=0):
         self.type_name = type_name

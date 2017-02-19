@@ -5,7 +5,7 @@ from flask import Flask, request, session, g, redirect, url_for, abort, render_t
 from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
 from sqlalchemy.types import Date
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, aliased
 from db_classes import base
 from db_classes.garment import Garment
 from db_classes.garment_brand import GarmentBrand
@@ -67,6 +67,24 @@ def get_db():
     return scoped_session(sessionmaker(bind=engine))
 
 
+def get_last_uses (use_conditions):
+    last_five_uses = []
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    result_set = session.query(GarmentCombo.used_on).filter_by(
+            use_conditions
+            ).order_by(GarmentCombo.used_on.desc()).all
+    session.close()
+    if result_set is None:
+        return {'error': "Something went wrong"}
+    else:
+        for item in result_set:
+            last_five_uses.append(item.used_on)
+        return last_five_uses
+
+
 @app.route('/garments', methods=['GET'])
 def get_garments():
     global engine
@@ -74,12 +92,38 @@ def get_garments():
         engine = connect_db()
     session = get_db()
     garments = []
-    results = session.query(Garment).all()
+    ga = aliased(Garment)
+    gt = aliased(GarmentType)
+    gb = aliased(GarmentBrand)
+    results = session.query(
+            Garment, GarmentType, GarmentBrand, UseInCombo
+            ).join(GarmentType).join(GarmentBrand).join(UseInCombo).filter(
+                    GarmentType.type_id==Garment.garment_type_id
+            ).filter(
+                    GarmentBrand.brand_id==Garment.garment_brand_id
+            ).filter(
+                    GarmentType.use_in_combo_as==UseInCombo.use_in_combo_id
+            ).all()
+    print results
     session.close()
     if len(results) == 0:
         return jsonify({'message': 'No entries here so far'})
-    for item in results:
-        garments.append({'id': item.garment_id})
+    for gar, gty, gbr, uic in results:
+        last_five_uses=[]
+        garments.append(dict(
+                garment_id=gar.garment_id,
+                type_id=gty.type_id,
+                type_name=gty.type_name,
+                brand_name=gbr.brand_name,
+                garment_color='#{}'.format(gar.garment_color),
+                use_id=gty.use_in_combo_as,
+                garment_secondary_color='#{}'.format(gar.garment_secondary_color),
+                last_five_uses=[],
+                last_washed_on=gar.last_washed_on,
+                purchase_date=gar.purchased_on,
+                use_name=uic.use_name,
+                garment_image_url=gar.garment_image_url
+                ))
     return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(results))})
 
 
@@ -91,9 +135,17 @@ def add_garment():
     try:
         garment_type_id = request.form.get('garment_type_id', None)
         garment_brand_id = request.form.get('garment_brand_id', None)
-        # website_url = request.form.get('website_url', '')
+        garment_color = request.form.get('garment_color', '')
+        garment_secondary_color = request.form.get('garment_secondary_color', '')
+        garment_image_url = request.form.get('garment_image_url', '')
+        last_washed_on = request.form.get('last_washed_on', '')
+        purchased_on = request.form.get('purchased_on', '')
         if garment_type_id is not None:
-            garment = Garment(garment_type_id, garment_brand_id)
+            garment = Garment(
+                    garment_type_id, garment_brand_id, garment_color,
+                    garment_secondary_color, garment_image_url, last_washed_on,
+                    purchased_on
+                    )
             session = get_db()
             session.add(garment)
             session.commit()
