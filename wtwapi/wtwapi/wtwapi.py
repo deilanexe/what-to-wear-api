@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import config
+from datetime import datetime
+
 from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, jsonify
 from sqlalchemy import create_engine
 from sqlalchemy.types import Date
@@ -139,8 +141,8 @@ def get_all_garments(session, branded):
                 use_id=item[4],
                 garment_secondary_color='#{}'.format(item[5]),
                 last_five_uses=last_five_uses,
-                last_washed_on=item[6],
-                purchase_date=item[7],
+                last_washed_on=item[6].strftime("%Y/%m/%d"),
+                purchase_date=item[7].strftime("%Y/%m/%d"),
                 use_name=use_name,
                 garment_image_url=item[9],
                 brand_name=item[11] if branded else ''
@@ -189,6 +191,38 @@ def add_garment():
             return jsonify({'message': 'ERROR: Garment type ID not provided!', 'status': 200}), 200
     except Exception as e:
         return jsonify({'message': 'ERROR: Something strange happened!!! {}'.format(e), 'status': 400}), 400
+
+
+@app.route('/garment/<int:garment_id>', methods=['PUT'])
+def update_garment(garment_id):
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    last_washed_date = request.args.get('lastWashedOn', datetime.today().strftime("%Y/%m/%d"))
+    try:
+        garment = session.query(Garment).get(garment_id)
+        garment.last_washed_on = last_washed_date
+        session.commit()
+        return jsonify ({'message': "Garment Last Washed Date Updated Successfully!!!", 'status': 200}), 201
+    except Exception as e:
+        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+
+
+@app.route('/garment/<int:garment_id>', methods=['DELETE'])
+def retire_garment(garment_id):
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    try:
+        garment = session.query(Garment).get(garment_id)
+        garment.available=0
+        retire_date=datetime.today().strftime("%Y/%m/%d")
+        session.commit()
+        return jsonify ({'message': "Garment Retired Successfully!!!", 'status': 200}), 201
+    except Exception as e:
+        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 201
 
 
 @app.route('/brands', methods=['GET'])
@@ -280,7 +314,7 @@ def add_garment_type():
 
 
 @app.route('/combos', methods=['GET'])
-def get_garments_for_combos():
+def get_combos():
     global engine
     if engine is None:
         engine = connect_db()
@@ -290,18 +324,75 @@ def get_garments_for_combos():
     session.close()
     if len(results) == 0:
         return jsonify({'message': 'No entries here so far'}), 200
+    else:
+        for item in results:
+            combos.append(dict(
+                    used_on=item.used_on.strftime("%Y/%m/%d"),
+                    head_id=item.head_id,
+                    upper_cov_id=item.upper_cov_id,
+                    upper_ext_id=item.upper_ext_id,
+                    upper_int_id=item.upper_int_id,
+                    lower_ext_id=item.lower_ext_id,
+                    lower_acc_id=item.lower_acc_id,
+                    foot_int_id=item.foot_int_id,
+                    foot_ext_id=item.foot_ext_id
+                    ))
+    return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(combos))}), 200
+
+
+@app.route('/garmentsForCombos', methods=['GET'])
+def get_garments_for_combos():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    ga = aliased(Garment)
+    gt = aliased(GarmentType)
+    uc = aliased(UseInCombo)
+    combos = []
+    results = session.query(
+            ga.garment_id, ga.garment_image_url,
+            gt.type_name, gt.use_in_combo_as,
+            uc.use_name
+            ).from_statement(
+            text('select \
+                        g.garment_id, \
+                        g.garment_image_url, \
+                        gt.type_name, \
+                        gt.use_in_combo_as, \
+                        uc.use_name \
+                    from \
+                        garment g \
+                    join \
+                        garment_type gt on g.garment_type_id=gt.type_id \
+                    join \
+                        use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id \
+                    where \
+                        g.available=1 \
+                    order by use_in_combo_as'
+                    )
+            ).all()
+    session.close()
+    if len(results) == 0:
+        return jsonify({'message': 'No entries here so far'}), 200
+    uses = {}
     for item in results:
-        combos.append(dict(
-                used_on=item.used_on,
-                head_id=item.head_id,
-                upper_cov_id=item.upper_cov_id,
-                upper_ext_id=item.upper_ext_id,
-                upper_int_id=item.upper_int_id,
-                lower_ext_id=item.lower_ext_id,
-                lower_acc_id=item.lower_acc_id,
-                foot_int_id=item.foot_int_id,
-                foot_ext_id=item.foot_ext_id
+        use_name = item[4]
+        use = [] if use_name not in uses else uses[use_name]
+        use.append(dict(
+                garment_id=item[0],
+                garment_name=item[0],
+                garment_image_url=item[1]
                 ))
+        uses[use_name] = use
+    if 'UPPER_COVER' in uses:
+        uses['UPPER_COVER'] += uses.get('UPPER_EXTERNAL', [])
+    if 'UPPER_EXTERNAL' in uses:
+        uses['UPPER_EXTERNAL'] += uses.get('UPPER_COVER', []) + uses.get('UPPER_INTERNAL', [])
+    if 'UPPER_INTERNAL' in uses:
+        uses['UPPER_INTERNAL'] += uses.get('UPPER_EXTERNAL', [])
+    for use, garments in uses.items():
+        combos.append({'name': use, 'garments': garments})
     return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(results))}), 200
 
 
