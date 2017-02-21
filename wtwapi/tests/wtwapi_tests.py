@@ -125,6 +125,23 @@ class wtwapiTestCase(unittest.TestCase):
             rv2 = self.app.get('/garment_types')
             assert b'Found 1 entries' in rv2.data
 
+    def test__count_garment_types(self):
+        with wtwapi.app.app_context():
+            rv = self.app.get('/garments')
+            assert b'No entries here so far' in rv.data
+            rmess = self.add_garment_type()
+            assert rmess.status_code == 201
+            rmess = self.add_brand(wiki_article='')
+            assert rmess.status_code == 201
+            # cannot insert garment without referring to type or brand
+            rmess = self.add_garment()
+            assert rmess.status_code == 201
+            rv2 = self.app.get('/garment_types/count')
+            j_data = json.loads(rv2.data)
+            assert b'Found 1 entries' in rv2.data
+            entry = j_data['results'][0]
+            assert entry['type_name'] == 'Test Type' and entry['count_garments'] == 1
+
     # tests over garment combos table
 
     def add_combo(
@@ -160,7 +177,6 @@ class wtwapiTestCase(unittest.TestCase):
             rmess = self.add_combo()
             assert rmess.status_code == 201
             rv2 = self.app.get('/combos')
-            print rv2.data
             assert b'Found 1 entries' in rv2.data
 
 
@@ -173,7 +189,6 @@ class wtwapiTestCase(unittest.TestCase):
             rmess = self.add_garment()
             assert rmess.status_code == 201
             rv2 = self.app.get('/garmentsForCombos')
-            print rv2.data
             assert b'Found 1 entries' in rv2.data
 
 
@@ -211,10 +226,8 @@ class wtwapiTestCase(unittest.TestCase):
             assert rmess.status_code == 201
             # cannot insert garment without referring to type or brand
             rmess = self.add_garment()
-            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/garments')
-            # print rv2.data
             assert b'Found 1 entries' in rv2.data
 
 
@@ -229,10 +242,8 @@ class wtwapiTestCase(unittest.TestCase):
             assert rmess.status_code == 201
             # cannot insert garment without referring to type or brand
             rmess = self.add_garment(garment_brand_id=None)
-            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/garments')
-            # print rv2.data
             assert b'Found 1 entries' in rv2.data
 
 
@@ -246,10 +257,8 @@ class wtwapiTestCase(unittest.TestCase):
             assert rmess.status_code == 201
             # cannot insert garment without referring to type or brand
             rmess = self.add_garment()
-            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/garments')
-            # print rv2.data
             assert b'Found 1 entries' in rv2.data
             rupd = self.app.put('/garment/1', data={'lastWashedOn': datetime(2017, 2, 20)})
             assert rupd.status_code == 201
@@ -269,10 +278,8 @@ class wtwapiTestCase(unittest.TestCase):
             assert rmess.status_code == 201
             # cannot insert garment without referring to type or brand
             rmess = self.add_garment()
-            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/garments')
-            # print rv2.data
             assert b'Found 1 entries' in rv2.data
             rdel = self.app.delete('/garment/1')
             assert rdel.status_code == 201

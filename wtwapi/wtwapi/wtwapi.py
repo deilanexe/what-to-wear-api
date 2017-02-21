@@ -2,7 +2,7 @@ import os
 import sqlite3
 import config
 from datetime import datetime
-
+from sqlalchemy import func
 from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, jsonify
 from sqlalchemy import create_engine
 from sqlalchemy.types import Date
@@ -73,7 +73,6 @@ def get_db():
 def get_last_uses(use_conditions):
     global engine
     last_five_uses = []
-    print use_conditions
     if engine is None:
         engine = connect_db()
     session = get_db()
@@ -199,7 +198,7 @@ def update_garment(garment_id):
     if engine is None:
         engine = connect_db()
     session = get_db()
-    last_washed_date = request.args.get('lastWashedOn', datetime.today().strftime("%Y/%m/%d"))
+    last_washed_date = request.form.get('lastWashedOn', datetime.today().strftime("%Y/%m/%d"))
     try:
         garment = session.query(Garment).get(garment_id)
         garment.last_washed_on = last_washed_date
@@ -394,6 +393,33 @@ def get_garments_for_combos():
     for use, garments in uses.items():
         combos.append({'name': use, 'garments': garments})
     return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(results))}), 200
+
+
+@app.route('/garment_types/count', methods=['GET'])
+def get_garment_types_counts():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    results = session.query(
+            Garment.garment_type_id,
+            GarmentType.type_name,
+            func.count('*')
+            ).filter_by(
+                    available=1
+            ).group_by(GarmentType.type_name).all()
+    session.close()
+    garment_count = 0
+    if len(results) == 0:
+        return jsonify({'message': 'No entries here so far'}), 200
+    else:
+        records = []
+        for entry in results:
+            (type_id, type_name, count_garments) = entry
+            garment_count += count_garments
+            records.append({'type_id': type_id, 'type_name':type_name, \
+                    'count_garments':count_garments})
+    return jsonify({'results': records, 'status': 200, 'time': datetime.now(), 'message': 'Found {} entries'.format(count_garments)}), 200
 
 
 @app.route('/combo', methods=['POST'])
