@@ -421,7 +421,9 @@ def get_garment_types_counts():
                             Garment.garment_type_id==GarmentType.type_id,
                             Garment.available==1
                     )
-            ).group_by(Garment.garment_type_id, GarmentType.type_name)
+            ).group_by(
+                    Garment.garment_type_id, GarmentType.type_name
+            ).order_by(GarmentType.type_name)
     results = query.all()
     session.close()
     garment_count = 0
@@ -432,7 +434,7 @@ def get_garment_types_counts():
         for entry in results:
             (type_id, type_name, count_garments) = entry
             garment_count += count_garments
-            records.append({'type_id': type_id, 'type_name':type_name, \
+            records.append({'type_id': str(type_id), 'type_name':type_name, \
                     'count_garments':count_garments})
     return jsonify({'results': records, 'status': 200, 'time': datetime.now(), 'message': 'Found {} entries'.format(garment_count)}), 200
 
