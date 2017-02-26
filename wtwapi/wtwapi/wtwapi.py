@@ -10,6 +10,7 @@ from sqlalchemy.types import Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, aliased
 from sqlalchemy import text
+from sqlalchemy import and_
 from db_classes import base
 from db_classes.garment import Garment
 from db_classes.garment_brand import GarmentBrand
@@ -411,13 +412,17 @@ def get_garment_types_counts():
     if engine is None:
         engine = connect_db()
     session = get_db()
-    results = session.query(
+    query = session.query(
             Garment.garment_type_id,
             GarmentType.type_name,
             func.count('*')
-            ).filter_by(
-                    available=1
-            ).group_by(GarmentType.type_name).all()
+            ).filter(
+                    and_(
+                            Garment.garment_type_id==GarmentType.type_id,
+                            Garment.available==1
+                    )
+            ).group_by(Garment.garment_type_id, GarmentType.type_name)
+    results = query.all()
     session.close()
     garment_count = 0
     if len(results) == 0:
@@ -429,7 +434,7 @@ def get_garment_types_counts():
             garment_count += count_garments
             records.append({'type_id': type_id, 'type_name':type_name, \
                     'count_garments':count_garments})
-    return jsonify({'results': records, 'status': 200, 'time': datetime.now(), 'message': 'Found {} entries'.format(count_garments)}), 200
+    return jsonify({'results': records, 'status': 200, 'time': datetime.now(), 'message': 'Found {} entries'.format(garment_count)}), 200
 
 
 @app.route('/combo', methods=['POST'])
