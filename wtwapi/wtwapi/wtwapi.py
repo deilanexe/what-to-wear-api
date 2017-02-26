@@ -4,6 +4,7 @@ import config
 from datetime import datetime
 from sqlalchemy import func
 from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, jsonify
+from flask_cors import CORS
 from sqlalchemy import create_engine
 from sqlalchemy.types import Date
 from sqlalchemy.ext.declarative import declarative_base
@@ -18,7 +19,8 @@ from db_classes.use_in_combo import UseInCombo
 
 
 app = Flask(__name__)
-app.config.from_object(config.DevConfig)
+CORS(app)
+app.config.from_object(config.ProdConfig)
 engine = None
 
 
@@ -321,20 +323,28 @@ def get_combos():
     combos = []
     results = session.query(Combo).all()
     session.close()
+    session = get_db()
+    images = {}
+    res_imgs = session.query(
+            Garment.garment_id, Garment.garment_image_url
+            ).all()
+    session.close()
+    for img in res_imgs:
+        images[img.garment_id] = img.garment_image_url
     if len(results) == 0:
         return jsonify({'message': 'No entries here so far'}), 200
     else:
         for item in results:
             combos.append(dict(
-                    used_on=item.used_on.strftime("%Y/%m/%d"),
-                    head_id=item.head_id,
-                    upper_cov_id=item.upper_cov_id,
-                    upper_ext_id=item.upper_ext_id,
-                    upper_int_id=item.upper_int_id,
-                    lower_ext_id=item.lower_ext_id,
-                    lower_acc_id=item.lower_acc_id,
-                    foot_int_id=item.foot_int_id,
-                    foot_ext_id=item.foot_ext_id
+                    use_date=item.used_on.strftime("%Y-%m-%d"),
+                    head_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.head_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    u_cov_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_cov_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    u_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_ext_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    u_int_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_int_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    l_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.lower_ext_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    l_acc_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.lower_acc_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    f_int_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.foot_int_id, app.config['DEFAULT_NONE_IMAGE'])),
+                    f_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.foot_ext_id, app.config['DEFAULT_NONE_IMAGE']))
                     ))
     return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(combos))}), 200
 
