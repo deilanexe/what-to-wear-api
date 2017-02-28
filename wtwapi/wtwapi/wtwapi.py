@@ -3,7 +3,10 @@ import sqlite3
 import config
 from datetime import datetime
 from sqlalchemy import func
-from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, jsonify
+import boto
+from boto.s3.key import Key
+from flask import Flask, request, session, g, redirect, url_for, abort
+from flask import render_template, flash, jsonify
 from flask_cors import CORS
 from sqlalchemy import create_engine
 from sqlalchemy.types import Date
@@ -17,11 +20,12 @@ from db_classes.garment_brand import GarmentBrand
 from db_classes.garment_type import GarmentType
 from db_classes.combos import Combo
 from db_classes.use_in_combo import UseInCombo
+import json
 
 
 app = Flask(__name__)
 CORS(app)
-app.config.from_object(config.ProdConfig)
+app.config.from_object(config.TestConfig)
 engine = None
 
 
@@ -143,13 +147,20 @@ def get_all_garments(session, branded):
                 use_id=item[4],
                 garment_secondary_color='#{}'.format(item[5]),
                 last_five_uses=last_five_uses,
-                last_washed_on=item[6].strftime("%Y/%m/%d"),
-                purchase_date=item[7].strftime("%Y/%m/%d"),
+                last_washed_on=item[6].strftime("%Y-%m-%d"),
+                purchase_date=item[7].strftime("%Y-%m-%d"),
                 use_name=use_name,
                 garment_image_url=item[9],
                 brand_name=item[11] if branded else ''
                 ))
     return items
+
+
+def transform_request_form(contents):
+    print contents[22:-9]
+    input_data = json.loads(contents[22:-9])
+    return input_data
+
 
 @app.route('/garments', methods=['GET'])
 def get_garments():
@@ -165,19 +176,36 @@ def get_garments():
         return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(garments))})
 
 
+def send_to_s3(data_files):
+    s3 = boto.connect_s3(
+            aws_access_key_id = app.config['S3_ACCESS_KEY'],
+            aws_secret_access_key = app.config['S3_SECRET_KEY']
+            )
+    bucket_name = app.config['S3_BUCKET_NAME']
+    bucket = s3.get_bucket(bucket_name)
+    k = Key(bucket)
+    for data_file in data_files:
+        file_contents = data_file.read()
+        # Use Boto to upload the file to the S3 bucket
+        k.key = '{}/{}'.format(app.config['S3_FOLDER'], data_file.filename)
+        print "Uploading some data to " + bucket_name + " with key: " + k.key
+        k.set_contents_from_string(file_contents)
+
+
 @app.route('/garment', methods=['POST'])
 def add_garment():
     global engine
     if engine is None:
         engine = connect_db()
     try:
-        garment_type_id = request.form.get('garment_type_id', None)
-        garment_brand_id = request.form.get('garment_brand_id', 0)
-        garment_color = request.form.get('garment_color', '')
-        garment_secondary_color = request.form.get('garment_secondary_color', '')
-        garment_image_url = request.form.get('garment_image_url', '')
-        last_washed_on = request.form.get('last_washed_on', '')
-        purchased_on = request.form.get('purchased_on', '')
+        input_data = transform_request_form(str(request.form))
+        garment_type_id = input_data.get('garment_type_id', None)
+        garment_brand_id = input_data.get('garment_brand_id', 0)
+        garment_color = input_data.get('garment_color', '')
+        garment_secondary_color = input_data.get('garment_secondary_color', '')
+        garment_image_url = input_data.get('garment_image_url', '')
+        last_washed_on = input_data.get('last_washed_on', '')
+        purchased_on = input_data.get('purchased_on', '')
         if garment_type_id is not None:
             garment = Garment(
                     garment_type_id, garment_color,
@@ -187,6 +215,8 @@ def add_garment():
             session = get_db()
             session.add(garment)
             session.commit()
+            if not app.config['DEVELOPMENT']:
+                send_to_s3(request.files.getlist('file[]'))
             session.close()
             return jsonify ({'message': "Garment Created Successfully!!!", 'status': 201}), 201
         else:
@@ -201,7 +231,9 @@ def update_garment(garment_id):
     if engine is None:
         engine = connect_db()
     session = get_db()
-    last_washed_date = request.form.get('lastWashedOn', datetime.today().strftime("%Y/%m/%d"))
+    input_data = transform_request_form(str(request.form))
+    print input_data
+    last_washed_date = input_data.get('last_washed_on', datetime.today().strftime("%Y/%m/%d"))
     try:
         garment = session.query(Garment).get(garment_id)
         garment.last_washed_on = last_washed_date
@@ -220,7 +252,7 @@ def retire_garment(garment_id):
     try:
         garment = session.query(Garment).get(garment_id)
         garment.available=0
-        retire_date=datetime.today().strftime("%Y/%m/%d")
+        garment.retire_date=datetime.today().strftime("%Y/%m/%d")
         session.commit()
         return jsonify ({'message': "Garment Retired Successfully!!!", 'status': 200}), 201
     except Exception as e:
@@ -239,7 +271,7 @@ def get_brands():
     if len(results) == 0:
         return jsonify({'message': 'No entries here so far'}), 200
     for item in results:
-        garment_brands.append({'brand_id': item.brand_id, 'brand_name': item.brand_name, 'wikipedia_article': item.wiki_article, 'website_url': item.website_url})
+        garment_brands.append({'brand_id': item.brand_id, 'brand_name': item.brand_name, 'wiki_article': item.wiki_article, 'website_url': item.website_url})
     return jsonify({'results': garment_brands, 'message': 'Found {} entries.'.format(len(results))}), 200
 
 
@@ -249,9 +281,16 @@ def add_brand():
     if engine is None:
         engine = connect_db()
     try:
-        brand_name = request.form.get('brand_name', None)
-        wiki_article = request.form.get('wiki_article', '')
-        website_url = request.form.get('website_url', '')
+        input_data = transform_request_form(str(request.form))
+        brand_name = input_data.get('brand_name', None)
+        wiki_article = input_data.get('wiki_article', '')
+        website_url = input_data.get('website_url', '')
+        # data = request.form.to_dict()
+        # print data
+        # brand_name = data.get('brand_name', None, type=str)
+        # wiki_article = request.form['wiki_article'] if 'wiki_article' in request.form else ''
+        # website_url = request.form['website_url'] if 'website_url' in request.form else ''
+        print 'hello {}!'.format(brand_name)
         if brand_name is not None:
             session = get_db()
             results = session.query(GarmentBrand).filter_by(brand_name=brand_name).first()
@@ -295,9 +334,10 @@ def add_garment_type():
     if engine is None:
         engine = connect_db()
     try:
-        type_name = request.form.get('type_name', None)
-        type_description = request.form.get('type_description', '')
-        use_in_combo_as = request.form.get('use_in_combo_as', 0)
+        input_data = transform_request_form(str(request.form))
+        type_name = input_data.get('type_name', None)
+        type_description = input_data.get('type_description', '')
+        use_in_combo_as = input_data.get('use_id', 0)
         if type_name is not None:
             session = get_db()
             results = session.query(GarmentType).filter_by(type_name=type_name).first()
@@ -445,15 +485,17 @@ def add_combo():
     if engine is None:
         engine = connect_db()
     try:
-        used_on = request.form.get('used_on', None)
-        head_id = request.form.get('head_id', 0)
-        upper_cov_id = request.form.get('upper_cov_id', 0)
-        upper_ext_id = request.form.get('upper_ext_id', 0)
-        upper_int_id = request.form.get('upper_int_id', 0)
-        lower_ext_id = request.form.get('lower_ext_id', 0)
-        lower_acc_id = request.form.get('lower_acc_id', 0)
-        foot_int_id = request.form.get('foot_int_id', 0)
-        foot_ext_id = request.form.get('foot_ext_id', 0)
+        input_data = transform_request_form(str(request.form))
+        used_on = input_data.get('combo_date', None)
+        head_id = input_data.get('head_id', 0)
+        upper_cov_id = input_data.get('upper_cov_id', 0)
+        upper_ext_id = input_data.get('upper_ext_id', 0)
+        upper_int_id = input_data.get('upper_int_id', 0)
+        lower_ext_id = input_data.get('lower_ext_id', 0)
+        lower_acc_id = input_data.get('lower_acc_id', 0)
+        foot_int_id = input_data.get('foot_int_id', 0)
+        foot_ext_id = input_data.get('foot_ext_id', 0)
+        # print 'hello {}!'.format(used_on)
         if used_on is not None:
             session = get_db()
             results = session.query(Combo).filter_by(used_on=used_on).first()
@@ -469,8 +511,8 @@ def add_combo():
                 session.commit()
                 session.close()
                 return jsonify ({'message': "Combo Created Successfully!!!", 'status': 201}), 201
-            return jsonify({'message': 'ERROR: Combo name already exists!', 'status': 200}), 200
-        return jsonify({'message': 'ERROR: Combo name not provided!', 'status': 200}), 200
+            return jsonify({'message': 'ERROR: Combo for date already exists!', 'status': 200}), 200
+        return jsonify({'message': 'ERROR: Combo date not provided!', 'status': 200}), 200
     except Exception as e:
         return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
 
