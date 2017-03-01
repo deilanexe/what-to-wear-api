@@ -21,6 +21,7 @@ from db_classes.garment_type import GarmentType
 from db_classes.combos import Combo
 from db_classes.use_in_combo import UseInCombo
 import json
+import webcolors
 
 
 app = Flask(__name__)
@@ -176,7 +177,7 @@ def get_garments():
         return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(garments))})
 
 
-def send_to_s3(data_files):
+def send_to_s3(data_files, file_name):
     s3 = boto.connect_s3(
             aws_access_key_id = app.config['S3_ACCESS_KEY'],
             aws_secret_access_key = app.config['S3_SECRET_KEY']
@@ -187,9 +188,41 @@ def send_to_s3(data_files):
     for data_file in data_files:
         file_contents = data_file.read()
         # Use Boto to upload the file to the S3 bucket
-        k.key = '{}/{}'.format(app.config['S3_FOLDER'], data_file.filename)
+        s3_filename = '{}/{}'.format(app.config['S3_FOLDER'], file_name)
+        k.key = s3_filename
         print "Uploading some data to " + bucket_name + " with key: " + k.key
         k.set_contents_from_string(file_contents)
+    return s3_filename
+
+
+# two methods below
+# source: http://stackoverflow.com/questions/9694165/convert-rgb-color-to-english-color-name-like-green
+def closest_colour(requested_colour):
+    min_colours = {}
+    for key, name in webcolors.css3_hex_to_names.items():
+        r_c, g_c, b_c = webcolors.hex_to_rgb(key)
+        rd = (r_c - requested_colour[0]) ** 2
+        gd = (g_c - requested_colour[1]) ** 2
+        bd = (b_c - requested_colour[2]) ** 2
+        min_colours[(rd + gd + bd)] = name
+    return min_colours[min(min_colours.keys())]
+
+
+def get_colour_name(requested_colour):
+    try:
+        closest_name = actual_name = webcolors.rgb_to_name(requested_colour)
+    except ValueError:
+        closest_name = closest_colour(requested_colour)
+        actual_name = None
+    return actual_name, closest_name
+
+
+# source: http://stackoverflow.com/questions/214359/converting-hex-color-to-rgb-and-vice-versa
+def hex_to_rgb(value):
+    """Return (red, green, blue) for the color given as #rrggbb."""
+    value = value.lstrip('#')
+    lv = len(value)
+    return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
 
 
 @app.route('/garment', methods=['POST'])
@@ -198,30 +231,43 @@ def add_garment():
     if engine is None:
         engine = connect_db()
     try:
-        input_data = transform_request_form(str(request.form))
-        garment_type_id = input_data.get('garment_type_id', None)
-        garment_brand_id = input_data.get('garment_brand_id', 0)
-        garment_color = input_data.get('garment_color', '')
-        garment_secondary_color = input_data.get('garment_secondary_color', '')
-        garment_image_url = input_data.get('garment_image_url', '')
-        last_washed_on = input_data.get('last_washed_on', '')
-        purchased_on = input_data.get('purchased_on', '')
+        print str(request.files)
+        garment_type_id = request.form.get('type_id', None)
+        garment_brand_id = request.form.get('brand_id', 0)
+        garment_color = request.form.get('colour', '')
+        garment_secondary_color = request.form.get('secondary_colour', '')
+        garment_image_url = request.form.get('image_path', '')
+        last_washed_on = request.form.get('last_washed_on', '')
+        purchased_on = request.form.get('purchase_date', '')
         if garment_type_id is not None:
+            colour_name = ''
+            if garment_color != '':
+                rgb_colour = hex_to_rgb('#{}'.format(garment_color))
+                colour_name = get_colour_name(rgb_colour)
+                colour_name = colour_name[0] if colour_name[0] is not None else colour_name[1]
+            file_name = '{}_{}_{}_{}.{}'.format(
+                    request.form.get('brand_name', ''),
+                    colour_name, request.form.get('type_name', ''),
+                    purchased_on,
+                    garment_image_url.split('.')[-1]
+                    )
+            s3_path = garment_image_url
+            if not app.config['DEVELOPMENT']:
+                s3_path = send_to_s3(request.files.getlist('file'), file_name)
             garment = Garment(
                     garment_type_id, garment_color,
-                    garment_secondary_color, garment_image_url, last_washed_on,
+                    garment_secondary_color, s3_path, last_washed_on,
                     purchased_on, garment_brand_id
                     )
             session = get_db()
             session.add(garment)
             session.commit()
-            if not app.config['DEVELOPMENT']:
-                send_to_s3(request.files.getlist('file[]'))
             session.close()
             return jsonify ({'message': "Garment Created Successfully!!!", 'status': 201}), 201
         else:
             return jsonify({'message': 'ERROR: Garment type ID not provided!', 'status': 200}), 200
     except Exception as e:
+        print e
         return jsonify({'message': 'ERROR: Something strange happened!!! {}'.format(e), 'status': 400}), 400
 
 

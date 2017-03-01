@@ -20,4 +20,5 @@ pytest==3.0.6
 PyYAML==3.12
 six==1.10.0
 SQLAlchemy==1.1.5
+webcolors==1.7
 Werkzeug==0.11.15
