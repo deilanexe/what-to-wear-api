@@ -151,7 +151,9 @@ def get_all_garments(session, branded):
                 last_washed_on=item[6].strftime("%Y-%m-%d"),
                 purchase_date=item[7].strftime("%Y-%m-%d"),
                 use_name=use_name,
-                garment_image_url=item[9],
+                garment_image_url='{}{}'.format(
+                        app.config['IMAGE_SOURCE_PATH'], item[9]
+                        )
                 brand_name=item[11] if branded else ''
                 ))
     return items
@@ -478,7 +480,9 @@ def get_garments_for_combos():
         use.append(dict(
                 garment_id=item[0],
                 garment_name=item[0],
-                garment_image_url=item[1]
+                garment_image_url='{}{}'.format(
+                        app.config['IMAGE_SOURCE_PATH'], item[1]
+                        )
                 ))
         uses[use_name] = use
     if 'UPPER_COVER' in uses:
