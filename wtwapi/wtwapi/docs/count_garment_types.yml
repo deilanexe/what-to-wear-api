@@ -1,0 +1,7 @@
+Returns the number of garments by garment type.
+The endpoint summarises the number of garments in the database by their
+type, featuring their Id and name.
+---
+  tags:
+    - garment_type
+    - garment

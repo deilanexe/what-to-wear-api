@@ -1,0 +1,6 @@
+Returns all image paths for the garments worn by date.
+The endpoint collects all garments worn on a given date and returns their
+image paths.
+---
+  tags:
+    - combo

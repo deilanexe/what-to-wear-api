@@ -1,0 +1,22 @@
+Adds a new garment type into the database.
+A garment type is comprised of a type, with optional brand, colours (primary and
+secondary), an image file, an acquisition date and a date when it was last washed on.
+---
+  tags:
+    - garment_type
+  parameters:
+    -
+      name: type_name
+      in: form
+      type: string
+      required: true
+    -
+      name: type_description
+      in: form
+      type: string
+      required: false
+    -
+      name: use_id
+      in: form
+      type: integer
+      required: false

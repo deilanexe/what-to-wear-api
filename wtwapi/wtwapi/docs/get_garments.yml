@@ -1,0 +1,7 @@
+Collects all garments in the database grouped by garment uses.
+This endpoint returns all garments in the database and groups them by
+uses, which are sort of garment supertypes.
+---
+  tags:
+    - garment
+    - uses_in_combos

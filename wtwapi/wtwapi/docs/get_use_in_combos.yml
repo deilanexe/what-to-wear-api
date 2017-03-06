@@ -1,0 +1,6 @@
+Returns all possible uses in combos in the database.
+Use in combo is comprised of an Id, a name, a description and the name of a
+field in the database (which is generally used when storing/loading a combo).
+---
+  tags:
+    - use_in_combo

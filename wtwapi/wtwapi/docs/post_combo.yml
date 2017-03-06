@@ -1,0 +1,53 @@
+Adds a new combination into the database.
+A combination is comprised of the Ids of a head, upper external, upper internal,
+upper cover, lower external, lower accessory, foot internal and foot external, along with the date when that attire was worn.
+---
+  tags:
+    - combo
+  parameters:
+    -
+      name: combo_date
+      in: form
+      type: date
+      required: true
+    -
+      name: head_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: upper_cov_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: upper_ext_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: upper_int_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: lower_ext_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: lower_acc_id
+      in: form
+      type: integer
+      required: false
+      defaults: 0
+    -
+      name: foot_ext_id
+      in: form
+      type: integer
+      required: false
+    -
+      name: foot_int_id
+      in: form
+      type: integer
+      required: false

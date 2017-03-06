@@ -1,0 +1,6 @@
+Collects all garment types in the database.
+The endpoint returns a flat list of garment types with all their details.
+
+---
+  tags:
+    - garment_type

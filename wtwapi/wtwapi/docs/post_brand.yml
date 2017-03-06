@@ -1,0 +1,22 @@
+Adds a new garment brand into the database
+A garment brand is comprised of a name, with optional Wikipedia article and
+the website URL of the brand.
+---
+  tags:
+    - brand
+  parameters:
+    -
+      name: brand_name
+      in: form
+      type: string
+      required: true
+    -
+      name: wiki_article
+      in: form
+      type: string
+      required: false
+    -
+      name: website_url
+      in: form
+      type: string
+      required: false

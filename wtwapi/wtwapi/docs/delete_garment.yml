@@ -1,0 +1,12 @@
+Makes the garment invisible for future display and combo selection.
+The endpoint makes the garment unavailable for combo selection and sets the
+retirement date as of today.
+---
+  tags:
+    - garment
+  parameters:
+    -
+      name: garment_id
+      in: path
+      type: integer
+      required: true

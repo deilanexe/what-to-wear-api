@@ -1,0 +1,7 @@
+Returns a list of garments grouped by use_in_combo.
+The endpoint collects garment Id and image path, and returns these grouped by
+their use in combo. It also combines upper garments as specified.
+---
+  tags:
+    - combo
+    - garment

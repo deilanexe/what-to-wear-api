@@ -1,0 +1,6 @@
+Collects all garment brands in the database.
+The endpoint returns a flat list of brands with all their details.
+
+---
+  tags:
+    - brand

@@ -8,6 +8,8 @@ from boto.s3.key import Key
 from flask import Flask, request, session, g, redirect, url_for, abort
 from flask import render_template, flash, jsonify
 from flask_cors import CORS
+from flasgger import Swagger
+from flasgger.utils import swag_from
 from sqlalchemy import create_engine
 from sqlalchemy.types import Date
 from sqlalchemy.ext.declarative import declarative_base
@@ -26,6 +28,7 @@ import webcolors
 
 app = Flask(__name__)
 CORS(app)
+Swagger(app)
 app.config.from_object(config.TestConfig)
 engine = None
 
@@ -89,7 +92,7 @@ def get_last_uses(use_conditions):
             ).order_by(Combo.used_on.desc()).all()
     session.close()
     for item in results:
-        last_five_uses.append(item.used_on)
+        last_five_uses.append(item.used_on.strftime("%Y-%m-%d"))
     return last_five_uses
 
 
@@ -153,7 +156,7 @@ def get_all_garments(session, branded):
                 use_name=use_name,
                 garment_image_url='{}{}'.format(
                         app.config['IMAGE_SOURCE_PATH'], item[9]
-                        )
+                        ),
                 brand_name=item[11] if branded else ''
                 ))
     return items
@@ -166,6 +169,7 @@ def transform_request_form(contents):
 
 
 @app.route('/garments', methods=['GET'])
+@swag_from('docs/get_garments.yml')
 def get_garments():
     global engine
     if engine is None:
@@ -228,6 +232,7 @@ def hex_to_rgb(value):
 
 
 @app.route('/garment', methods=['POST'])
+@swag_from('docs/post_garment.yml')
 def add_garment():
     global engine
     if engine is None:
@@ -274,6 +279,7 @@ def add_garment():
 
 
 @app.route('/garment/<int:garment_id>', methods=['PUT'])
+@swag_from('docs/put_garment.yml')
 def update_garment(garment_id):
     global engine
     if engine is None:
@@ -281,7 +287,7 @@ def update_garment(garment_id):
     session = get_db()
     input_data = transform_request_form(str(request.form))
     print input_data
-    last_washed_date = input_data.get('last_washed_on', datetime.today().strftime("%Y/%m/%d"))
+    last_washed_date = input_data.get('last_washed_on', datetime.today().strftime("%Y-%m-%d"))
     try:
         garment = session.query(Garment).get(garment_id)
         garment.last_washed_on = last_washed_date
@@ -292,6 +298,7 @@ def update_garment(garment_id):
 
 
 @app.route('/garment/<int:garment_id>', methods=['DELETE'])
+@swag_from('docs/delete_garment.yml')
 def retire_garment(garment_id):
     global engine
     if engine is None:
@@ -300,7 +307,7 @@ def retire_garment(garment_id):
     try:
         garment = session.query(Garment).get(garment_id)
         garment.available=0
-        garment.retire_date=datetime.today().strftime("%Y/%m/%d")
+        garment.retire_date=datetime.today().strftime("%Y-%m-%d")
         session.commit()
         return jsonify ({'message': "Garment Retired Successfully!!!", 'status': 200}), 201
     except Exception as e:
@@ -308,6 +315,7 @@ def retire_garment(garment_id):
 
 
 @app.route('/brands', methods=['GET'])
+@swag_from('docs/get_brands.yml')
 def get_brands():
     global engine
     if engine is None:
@@ -324,6 +332,7 @@ def get_brands():
 
 
 @app.route('/brand', methods=['POST'])
+@swag_from('docs/post_brand.yml')
 def add_brand():
     global engine
     if engine is None:
@@ -338,7 +347,6 @@ def add_brand():
         # brand_name = data.get('brand_name', None, type=str)
         # wiki_article = request.form['wiki_article'] if 'wiki_article' in request.form else ''
         # website_url = request.form['website_url'] if 'website_url' in request.form else ''
-        print 'hello {}!'.format(brand_name)
         if brand_name is not None:
             session = get_db()
             results = session.query(GarmentBrand).filter_by(brand_name=brand_name).first()
@@ -357,6 +365,7 @@ def add_brand():
 
 
 @app.route('/garment_types', methods=['GET'])
+@swag_from('docs/get_garment_types.yml')
 def get_garment_types():
     global engine
     if engine is None:
@@ -377,6 +386,7 @@ def get_garment_types():
     return jsonify({'results': garment_types, 'message': 'Found {} entries.'.format(len(results))}), 200
 
 @app.route('/garment_type', methods=['POST'])
+@swag_from('docs/post_garment_type.yml')
 def add_garment_type():
     global engine
     if engine is None:
@@ -404,6 +414,7 @@ def add_garment_type():
 
 
 @app.route('/combos', methods=['GET'])
+@swag_from('docs/get_combos.yml')
 def get_combos():
     global engine
     if engine is None:
@@ -439,6 +450,7 @@ def get_combos():
 
 
 @app.route('/garmentsForCombos', methods=['GET'])
+@swag_from('docs/get_garments_for_combos.yml')
 def get_garments_for_combos():
     global engine
     if engine is None:
@@ -497,6 +509,7 @@ def get_garments_for_combos():
 
 
 @app.route('/garment_types/count', methods=['GET'])
+@swag_from('docs/count_garment_types.yml')
 def get_garment_types_counts():
     global engine
     if engine is None:
@@ -530,11 +543,13 @@ def get_garment_types_counts():
 
 
 @app.route('/combo', methods=['POST'])
+@swag_from('docs/post_combo.yml')
 def add_combo():
     global engine
     if engine is None:
         engine = connect_db()
     try:
+        # print str(request.form)
         input_data = transform_request_form(str(request.form))
         used_on = input_data.get('combo_date', None)
         head_id = input_data.get('head_id', 0)
@@ -568,6 +583,7 @@ def add_combo():
 
 
 @app.route('/use_in_combos', methods=['GET'])
+@swag_from('docs/get_use_in_combos.yml')
 def get_uses_in_combos():
     global engine
     if engine is None:

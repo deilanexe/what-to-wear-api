@@ -1,0 +1,18 @@
+Updates last washed on date of the specified garment.
+As currently this is the main parameter to update, the endpoint only
+changes the value on <last washed on> date.
+---
+  tags:
+    - garment
+  parameters:
+    -
+      name: garment_id
+      in: path
+      type: integer
+      required: true
+    -
+      name: last_washed_on
+      description: A string representing the day when the garment was washed on (in format YYYY-mm-dd), defaults to today if omitted.
+      in: query
+      type: date
+      required: false
