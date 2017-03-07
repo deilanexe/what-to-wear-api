@@ -198,6 +198,7 @@ def send_to_s3(data_files, file_name, file_name_s):
         k.key = s3_filename
         print "Uploading some data to " + bucket_name + " with key: " + k.key
         k.set_contents_from_string(file_contents)
+        k.set_acl('public-read')
 
         from PIL import Image, ExifTags
         import glob, os
@@ -230,6 +231,7 @@ def send_to_s3(data_files, file_name, file_name_s):
         k.key = s3_filename_sml
         print "Uploading some data to " + bucket_name + " with key: " + k.key
         k.set_contents_from_string(out_im.getvalue())
+        k.set_acl('public-read')
     return s3_filename_sml
 
 
