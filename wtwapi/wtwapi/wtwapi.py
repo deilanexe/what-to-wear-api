@@ -183,7 +183,7 @@ def get_garments():
         return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(garments))})
 
 
-def send_to_s3(data_files, file_name):
+def send_to_s3(data_files, file_name, file_name_s):
     s3 = boto.connect_s3(
             aws_access_key_id = app.config['S3_ACCESS_KEY'],
             aws_secret_access_key = app.config['S3_SECRET_KEY']
@@ -198,7 +198,39 @@ def send_to_s3(data_files, file_name):
         k.key = s3_filename
         print "Uploading some data to " + bucket_name + " with key: " + k.key
         k.set_contents_from_string(file_contents)
-    return s3_filename
+
+        from PIL import Image, ExifTags
+        import glob, os
+        import cStringIO
+
+        max_minsize = 200
+        print type(data_file)
+        im = Image.open(data_file)
+        for orientation in ExifTags.TAGS.keys() :
+            if ExifTags.TAGS[orientation]=='Orientation' : break
+        exif=dict(im._getexif().items())
+    #     print infile
+        current_size = im.size
+        print current_size
+        min_len_idx = 0 if current_size[0] < current_size[1] else 1
+        new_size = ()
+        if min_len_idx == 0:
+            other_size = int(float(current_size[1]) * float(max_minsize) / float(current_size[0]))
+            new_size = (max_minsize, other_size)
+        else:
+            other_size = int(float(current_size[0]) * float(max_minsize) / float(current_size[1]))
+            new_size = (other_size, max_minsize)
+        if exif[orientation] == 6 :
+            im=im.rotate(270, expand=True)
+        im.thumbnail(new_size)
+        out_im = cStringIO.StringIO()
+        im.save(out_im, 'JPEG')
+
+        s3_filename_sml = '{}/{}'.format(app.config['S3_FOLDER'], file_name_s)
+        k.key = s3_filename_sml
+        print "Uploading some data to " + bucket_name + " with key: " + k.key
+        k.set_contents_from_string(out_im.getvalue())
+    return s3_filename_sml
 
 
 # two methods below
@@ -258,9 +290,15 @@ def add_garment():
                     purchased_on,
                     garment_image_url.split('.')[-1]
                     )
+            file_name_sml = '{}_{}_{}_{}_sm.{}'.format(
+                    request.form.get('brand_name', ''),
+                    colour_name, request.form.get('type_name', ''),
+                    purchased_on,
+                    garment_image_url.split('.')[-1]
+                    )
             s3_path = garment_image_url
             if not app.config['DEVELOPMENT']:
-                s3_path = send_to_s3(request.files.getlist('file'), file_name)
+                s3_path = send_to_s3(request.files.getlist('file'), file_name, file_name_sml)
             garment = Garment(
                     garment_type_id, garment_color,
                     garment_secondary_color, s3_path, last_washed_on,
