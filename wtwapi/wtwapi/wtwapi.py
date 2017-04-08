@@ -74,14 +74,15 @@ def initdb_command():
 
 
 def get_db():
-    """Opens a new database connection if there is none yet for the
+    """
+    Opens a new database connection if there is none yet for the
     current application context.
     """
     global engine
     return scoped_session(sessionmaker(bind=engine))
 
 
-def get_last_uses(use_conditions):
+def get_last_uses(use_conditions, since="2000-01-01", count_max=9999):
     global engine
     last_five_uses = []
     if engine is None:
@@ -91,20 +92,30 @@ def get_last_uses(use_conditions):
             text(use_conditions)
             ).order_by(Combo.used_on.desc()).all()
     session.close()
+    counter = 0
     for item in results:
-        last_five_uses.append(item.used_on.strftime("%Y-%m-%d"))
+        if item.used_on > datetime.strptime(
+                since, "%Y-%m-%d"
+                ).date() and counter < count_max:
+            last_five_uses.append(item.used_on.strftime("%Y-%m-%d"))
+        counter += 1
     return last_five_uses
 
 
 def get_all_garments(session, branded):
     items = []
-    query = "select g.garment_id, g.garment_image_url, \
+    query = "select \
+            g.garment_id, g.garment_image_url, \
             g.garment_brand_id, g.last_washed_on, \
             g.purchased_on, {}\
             g.garment_type_id as type_id, gt.type_name, \
             gt.use_in_combo_as, g.garment_color, g.garment_secondary_color,\
             uc.use_name, uc.field_in_db \
-            from garment g join garment_type gt on g.garment_type_id=gt.type_id join use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id {} where g.available=1 and g.garment_brand_id {} order by use_in_combo_as".format(
+            from garment g join garment_type gt on \
+                    g.garment_type_id=gt.type_id \
+            join use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id {} \
+            where g.available=1 and g.garment_brand_id {} \
+            order by use_in_combo_as".format(
                     'gb.brand_name,' if branded else '',
                     'join garment_brands gb on g.garment_brand_id = gb.brand_id' if branded else '',
                     '<> 0' if branded else '= 0'
@@ -137,12 +148,15 @@ def get_all_garments(session, branded):
         garment_id, use_name, field_in_db = item[0], item[8], item[10]
         use_string = '{} = {}'.format(field_in_db, garment_id)
         if use_name == 'upper_ext_id':
-            use_string += ' OR upper_int_id = {0} OR upper_cov_id = {0}'.format(garment_id)
+            use_string += ' OR upper_int_id = {0} \
+                    OR upper_cov_id = {0}'.format(garment_id)
         elif use_name == 'upper_cov_id':
             use_string += ' OR upper_ext_id = {}'.format(garment_id)
         elif use_name == 'upper_int_id':
             use_string += ' OR upper_ext_id = {}'.format(garment_id)
-        last_five_uses = get_last_uses(use_string)
+        last_five_uses = get_last_uses(use_string, count_max=5)
+        last_washed_on = item[6].strftime("%Y-%m-%d")
+        uses_since_washed = len(get_last_uses(use_string, last_washed_on))
         items.append(dict(
                 garment_id=garment_id,
                 type_id=item[1],
@@ -151,7 +165,8 @@ def get_all_garments(session, branded):
                 use_id=item[4],
                 garment_secondary_color='#{}'.format(item[5]),
                 last_five_uses=last_five_uses,
-                last_washed_on=item[6].strftime("%Y-%m-%d"),
+                uses_since_washed=uses_since_washed,
+                last_washed_on=last_washed_on,
                 purchase_date=item[7].strftime("%Y-%m-%d"),
                 use_name=use_name,
                 garment_image_url='{}{}'.format(
@@ -180,13 +195,16 @@ def get_garments():
     if len(garments) == 0:
         return jsonify({'message': 'No entries here so far'})
     else:
-        return jsonify({'results': garments, 'message': 'Found {} entries.'.format(len(garments))})
+        return jsonify({
+                'results': garments,
+                'message': 'Found {} entries.'.format(len(garments))
+                })
 
 
 def send_to_s3(data_files, file_name, file_name_s):
     s3 = boto.connect_s3(
-            aws_access_key_id = app.config['S3_ACCESS_KEY'],
-            aws_secret_access_key = app.config['S3_SECRET_KEY']
+            aws_access_key_id=app.config['S3_ACCESS_KEY'],
+            aws_secret_access_key=app.config['S3_SECRET_KEY']
             )
     bucket_name = app.config['S3_BUCKET_NAME']
     bucket = s3.get_bucket(bucket_name)
@@ -201,28 +219,34 @@ def send_to_s3(data_files, file_name, file_name_s):
         k.set_acl('public-read')
 
         from PIL import Image, ExifTags
-        import glob, os
+        import glob
+        import os
         import cStringIO
 
         max_minsize = 200
         print type(data_file)
         im = Image.open(data_file)
-        for orientation in ExifTags.TAGS.keys() :
-            if ExifTags.TAGS[orientation]=='Orientation' : break
-        exif=dict(im._getexif().items())
+        for orientation in ExifTags.TAGS.keys():
+            if ExifTags.TAGS[orientation] == 'Orientation':
+                break
+        exif = dict(im._getexif().items())
     #     print infile
         current_size = im.size
         print current_size
         min_len_idx = 0 if current_size[0] < current_size[1] else 1
         new_size = ()
         if min_len_idx == 0:
-            other_size = int(float(current_size[1]) * float(max_minsize) / float(current_size[0]))
+            other_size = int(float(current_size[1]) * float(
+                    max_minsize
+                    ) / float(current_size[0]))
             new_size = (max_minsize, other_size)
         else:
-            other_size = int(float(current_size[0]) * float(max_minsize) / float(current_size[1]))
+            other_size = int(float(current_size[0]) * float(
+                    max_minsize
+                    ) / float(current_size[1]))
             new_size = (other_size, max_minsize)
-        if exif[orientation] == 6 :
-            im=im.rotate(270, expand=True)
+        if exif[orientation] == 6:
+            im = im.rotate(270, expand=True)
         im.thumbnail(new_size)
         out_im = cStringIO.StringIO()
         im.save(out_im, 'JPEG')
@@ -259,7 +283,9 @@ def get_colour_name(requested_colour):
 
 # source: http://stackoverflow.com/questions/214359/converting-hex-color-to-rgb-and-vice-versa
 def hex_to_rgb(value):
-    """Return (red, green, blue) for the color given as #rrggbb."""
+    """
+    Return (red, green, blue) for the color given as #rrggbb.
+    """
     value = value.lstrip('#')
     lv = len(value)
     return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
@@ -285,7 +311,9 @@ def add_garment():
             if garment_color != '':
                 rgb_colour = hex_to_rgb('#{}'.format(garment_color))
                 colour_name = get_colour_name(rgb_colour)
-                colour_name = colour_name[0] if colour_name[0] is not None else colour_name[1]
+                colour_name = colour_name[0] if colour_name[
+                        0
+                        ] is not None else colour_name[1]
             file_name = '{}_{}_{}_{}.{}'.format(
                     request.form.get('brand_name', ''),
                     colour_name, request.form.get('type_name', ''),
@@ -300,7 +328,9 @@ def add_garment():
                     )
             s3_path = garment_image_url
             if not app.config['DEVELOPMENT']:
-                s3_path = send_to_s3(request.files.getlist('file'), file_name, file_name_sml)
+                s3_path = send_to_s3(request.files.getlist(
+                        'file'
+                        ), file_name, file_name_sml)
             garment = Garment(
                     garment_type_id, garment_color,
                     garment_secondary_color, s3_path, last_washed_on,
@@ -310,12 +340,21 @@ def add_garment():
             session.add(garment)
             session.commit()
             session.close()
-            return jsonify ({'message': "Garment Created Successfully!!!", 'status': 201}), 201
+            return jsonify({
+                    'message': "Garment Created Successfully!!!", 'status': 201
+                    }), 201
         else:
-            return jsonify({'message': 'ERROR: Garment type ID not provided!', 'status': 200}), 200
+            return jsonify({
+                    'message': 'ERROR: Garment type ID not provided!',
+                    'status': 200
+                    }), 200
     except Exception as e:
         print e
-        return jsonify({'message': 'ERROR: Something strange happened!!! {}'.format(e), 'status': 400}), 400
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!! {}'.format(
+                        e
+                        ), 'status': 400
+                }), 400
 
 
 @app.route('/garment/<int:garment_id>', methods=['PUT'])
@@ -327,14 +366,22 @@ def update_garment(garment_id):
     session = get_db()
     input_data = transform_request_form(str(request.form))
     print input_data
-    last_washed_date = input_data.get('last_washed_on', datetime.today().strftime("%Y-%m-%d"))
+    last_washed_date = input_data.get(
+            'last_washed_on', datetime.today().strftime("%Y-%m-%d")
+            )
     try:
         garment = session.query(Garment).get(garment_id)
         garment.last_washed_on = last_washed_date
         session.commit()
-        return jsonify ({'message': "Garment Last Washed Date Updated Successfully!!!", 'status': 200}), 201
+        return jsonify({
+                'message': "Garment Last Washed Date Updated Successfully!!!",
+                'status': 200
+                }), 201
     except Exception as e:
-        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!!',
+                'status': 200
+                }), 200
 
 
 @app.route('/garment/<int:garment_id>', methods=['DELETE'])
@@ -346,12 +393,17 @@ def retire_garment(garment_id):
     session = get_db()
     try:
         garment = session.query(Garment).get(garment_id)
-        garment.available=0
-        garment.retire_date=datetime.today().strftime("%Y-%m-%d")
+        garment.available = 0
+        garment.retire_date = datetime.today().strftime("%Y-%m-%d")
         session.commit()
-        return jsonify ({'message': "Garment Retired Successfully!!!", 'status': 200}), 201
+        return jsonify({
+                'message': "Garment Retired Successfully!!!", 'status': 200
+                }), 201
     except Exception as e:
-        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 201
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!!',
+                'status': 200
+                }), 201
 
 
 @app.route('/brands', methods=['GET'])
@@ -367,8 +419,16 @@ def get_brands():
     if len(results) == 0:
         return jsonify({'message': 'No entries here so far'}), 200
     for item in results:
-        garment_brands.append({'brand_id': item.brand_id, 'brand_name': item.brand_name, 'wiki_article': item.wiki_article, 'website_url': item.website_url})
-    return jsonify({'results': garment_brands, 'message': 'Found {} entries.'.format(len(results))}), 200
+        garment_brands.append({
+                'brand_id': item.brand_id,
+                'brand_name': item.brand_name,
+                'wiki_article': item.wiki_article,
+                'website_url': item.website_url
+                })
+    return jsonify({
+            'results': garment_brands,
+            'message': 'Found {} entries.'.format(len(results))
+            }), 200
 
 
 @app.route('/brand', methods=['POST'])
@@ -385,11 +445,13 @@ def add_brand():
         # data = request.form.to_dict()
         # print data
         # brand_name = data.get('brand_name', None, type=str)
-        # wiki_article = request.form['wiki_article'] if 'wiki_article' in request.form else ''
-        # website_url = request.form['website_url'] if 'website_url' in request.form else ''
+        # wiki_article = request.form.get('wiki_article', '')
+        # website_url = request.form.get('website_url', '')
         if brand_name is not None:
             session = get_db()
-            results = session.query(GarmentBrand).filter_by(brand_name=brand_name).first()
+            results = session.query(GarmentBrand).filter_by(
+                    brand_name=brand_name
+                    ).first()
             session.close()
             if results is None:
                 brand = GarmentBrand(brand_name, wiki_article, website_url)
@@ -397,11 +459,22 @@ def add_brand():
                 session.add(brand)
                 session.commit()
                 session.close()
-                return jsonify ({'message': "Brand Created Successfully!!!", 'status': 201}), 201
-            return jsonify({'message': 'ERROR: Brand name already exists!', 'status': 200}), 200
-        return jsonify({'message': 'ERROR: Brand name not provided!', 'status': 200}), 200
+                return jsonify({
+                        'message': "Brand Created Successfully!!!",
+                        'status': 201
+                        }), 201
+            return jsonify({
+                    'message': 'ERROR: Brand name already exists!',
+                    'status': 200
+                    }), 200
+        return jsonify({
+                'message': 'ERROR: Brand name not provided!', 'status': 200
+                }), 200
     except Exception as e:
-        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!!',
+                'status': 200
+                }), 200
 
 
 @app.route('/garment_types', methods=['GET'])
@@ -423,7 +496,12 @@ def get_garment_types():
                 type_description=item.type_description,
                 use_in_combo_as=item.use_in_combo_as
                 ))
-    return jsonify({'results': garment_types, 'message': 'Found {} entries.'.format(len(results))}), 200
+    return jsonify({
+            'results': garment_types, 'message': 'Found {} entries.'.format(
+                    len(results)
+                    )
+            }), 200
+
 
 @app.route('/garment_type', methods=['POST'])
 @swag_from('docs/post_garment_type.yml')
@@ -438,19 +516,35 @@ def add_garment_type():
         use_in_combo_as = input_data.get('use_id', 0)
         if type_name is not None:
             session = get_db()
-            results = session.query(GarmentType).filter_by(type_name=type_name).first()
+            results = session.query(GarmentType).filter_by(
+                    type_name=type_name
+                    ).first()
             session.close()
             if results is None:
-                g_type = GarmentType(type_name, type_description, use_in_combo_as)
+                g_type = GarmentType(
+                        type_name, type_description, use_in_combo_as
+                        )
                 session = get_db()
                 session.add(g_type)
                 session.commit()
                 session.close()
-                return jsonify ({'message': "Garment Type Created Successfully!!!", 'status': 201}), 201
-            return jsonify({'message': 'ERROR: Garment Type name already exists!', 'status': 200}), 200
-        return jsonify({'message': 'ERROR: Garment Type name not provided!', 'status': 200}), 200
+                return jsonify({
+                        'message': "Garment Type Created Successfully!!!",
+                        'status': 201
+                        }), 201
+            return jsonify({
+                    'message': 'ERROR: Garment Type name already exists!',
+                    'status': 200
+                    }), 200
+        return jsonify({
+                'message': 'ERROR: Garment Type name not provided!',
+                'status': 200
+                }), 200
     except Exception as e:
-        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!!',
+                'status': 200
+                }), 200
 
 
 @app.route('/combos', methods=['GET'])
@@ -477,16 +571,67 @@ def get_combos():
         for item in results:
             combos.append(dict(
                     use_date=item.used_on.strftime("%Y-%m-%d"),
-                    head_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.head_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    u_cov_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_cov_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    u_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_ext_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    u_int_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.upper_int_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    l_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.lower_ext_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    l_acc_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.lower_acc_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    f_int_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.foot_int_id, app.config['DEFAULT_NONE_IMAGE'])),
-                    f_ext_img='{}{}'.format(app.config['IMAGE_SOURCE_PATH'], images.get(item.foot_ext_id, app.config['DEFAULT_NONE_IMAGE']))
+                    head_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.head_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    u_cov_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.upper_cov_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    u_ext_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.upper_ext_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    u_int_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.upper_int_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    l_ext_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.lower_ext_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    l_acc_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.lower_acc_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    f_int_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.foot_int_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            ),
+                    f_ext_img='{}{}'.format(
+                            app.config['IMAGE_SOURCE_PATH'],
+                            images.get(
+                                    item.foot_ext_id,
+                                    app.config['DEFAULT_NONE_IMAGE']
+                                    )
+                            )
                     ))
-    return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(combos))}), 200
+    return jsonify({
+            'results': combos,
+            'message': 'Found {} entries.'.format(len(combos))
+            }), 200
 
 
 @app.route('/garmentsForCombos', methods=['GET'])
@@ -505,7 +650,8 @@ def get_garments_for_combos():
             gt.type_name, gt.use_in_combo_as,
             uc.use_name
             ).from_statement(
-            text('select \
+            text(
+                    'select \
                         g.garment_id, \
                         g.garment_image_url, \
                         gt.type_name, \
@@ -516,7 +662,8 @@ def get_garments_for_combos():
                     join \
                         garment_type gt on g.garment_type_id=gt.type_id \
                     join \
-                        use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id \
+                        use_in_combo uc on \
+                                gt.use_in_combo_as=uc.use_in_combo_id \
                     where \
                         g.available=1 \
                     order by use_in_combo_as'
@@ -540,12 +687,18 @@ def get_garments_for_combos():
     if 'UPPER_COVER' in uses:
         uses['UPPER_COVER'] += uses.get('UPPER_EXTERNAL', [])
     if 'UPPER_EXTERNAL' in uses:
-        uses['UPPER_EXTERNAL'] += uses.get('UPPER_COVER', []) + uses.get('UPPER_INTERNAL', [])
+        uses['UPPER_EXTERNAL'] += uses.get('UPPER_COVER', []) + uses.get(
+                'UPPER_INTERNAL', []
+                )
     if 'UPPER_INTERNAL' in uses:
         uses['UPPER_INTERNAL'] += uses.get('UPPER_EXTERNAL', [])
     for use, garments in uses.items():
         combos.append({'name': use, 'garments': garments})
-    return jsonify({'results': combos, 'message': 'Found {} entries.'.format(len(results))}), 200
+    return jsonify({
+            'results': combos, 'message': 'Found {} entries.'.format(
+                    len(results)
+                    )
+            }), 200
 
 
 @app.route('/garment_types/count', methods=['GET'])
@@ -561,8 +714,8 @@ def get_garment_types_counts():
             func.count('*')
             ).filter(
                     and_(
-                            Garment.garment_type_id==GarmentType.type_id,
-                            Garment.available==1
+                            Garment.garment_type_id == GarmentType.type_id,
+                            Garment.available == 1
                     )
             ).group_by(
                     Garment.garment_type_id, GarmentType.type_name
@@ -577,9 +730,17 @@ def get_garment_types_counts():
         for entry in results:
             (type_id, type_name, count_garments) = entry
             garment_count += count_garments
-            records.append({'type_id': str(type_id), 'type_name':type_name, \
-                    'count_garments':count_garments})
-    return jsonify({'results': records, 'status': 200, 'time': datetime.now(), 'message': 'Found {} entries'.format(garment_count)}), 200
+            records.append({
+                    'type_id': str(type_id),
+                    'type_name': type_name,
+                    'count_garments': count_garments
+                    })
+    return jsonify({
+            'results': records,
+            'status': 200,
+            'time': datetime.now(),
+            'message': 'Found {} entries'.format(garment_count)
+            }), 200
 
 
 @app.route('/combo', methods=['POST'])
@@ -615,11 +776,22 @@ def add_combo():
                 session.add(combo)
                 session.commit()
                 session.close()
-                return jsonify ({'message': "Combo Created Successfully!!!", 'status': 201}), 201
-            return jsonify({'message': 'ERROR: Combo for date already exists!', 'status': 200}), 200
-        return jsonify({'message': 'ERROR: Combo date not provided!', 'status': 200}), 200
+                return jsonify({
+                        'message': "Combo Created Successfully!!!",
+                        'status': 201
+                        }), 201
+            return jsonify({
+                    'message': 'ERROR: Combo for date already exists!',
+                    'status': 200
+                    }), 200
+        return jsonify({
+                'message': 'ERROR: Combo date not provided!', 'status': 200
+                }), 200
     except Exception as e:
-        return jsonify({'message': 'ERROR: Something strange happened!!!', 'status': 200}), 200
+        return jsonify({
+                'message': 'ERROR: Something strange happened!!!',
+                'status': 200
+                }), 200
 
 
 @app.route('/use_in_combos', methods=['GET'])
@@ -641,7 +813,10 @@ def get_uses_in_combos():
                 use_description=item.use_description,
                 field_in_db=item.field_in_db
                 ))
-    return jsonify({'results': uses_in_combos, 'message': 'Found {} entries.'.format(len(results))}), 200
+    return jsonify({
+            'results': uses_in_combos,
+            'message': 'Found {} entries.'.format(len(results))
+            }), 200
 
 
 if __name__ == '__main__':
