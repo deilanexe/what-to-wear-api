@@ -1,0 +1,7 @@
+Collects all garments in the database sorted by the number of uses since washed.
+This endpoint returns all garments in the database and orders them by
+the number of uses since washed.
+---
+  tags:
+    - garment
+    - uses_in_combos

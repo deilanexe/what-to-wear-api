@@ -102,7 +102,7 @@ def get_last_uses(use_conditions, since="2000-01-01", count_max=9999):
     return last_five_uses
 
 
-def get_all_garments(session, branded):
+def get_all_garments_old(session, branded):
     items = []
     query = "select \
             g.garment_id, g.garment_image_url, \
@@ -177,10 +177,143 @@ def get_all_garments(session, branded):
     return items
 
 
+def get_all_garments(session, branded=True):
+    items = {}
+    query = "select \
+            g.garment_id, g.garment_image_url, \
+            g.garment_brand_id, g.last_washed_on, \
+            g.purchased_on, {}\
+            g.garment_type_id as type_id, gt.type_name, \
+            gt.use_in_combo_as, g.garment_color, g.garment_secondary_color,\
+            uc.use_name, uc.field_in_db \
+            from garment g join garment_type gt on \
+                    g.garment_type_id=gt.type_id \
+            join use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id {} \
+            where g.available=1 and g.garment_brand_id {} \
+            order by use_in_combo_as".format(
+                    'gb.brand_name,' if branded else '',
+                    'join garment_brands gb on g.garment_brand_id = gb.brand_id' if branded else '',
+                    '<> 0' if branded else '= 0'
+                    )
+    ga = aliased(Garment)
+    gt = aliased(GarmentType)
+    gb = aliased(GarmentBrand)
+    if branded:
+        results = session.query(
+                ga.garment_id, gt.type_id, gt.type_name,
+                ga.garment_color, gt.use_in_combo_as,
+                ga.garment_secondary_color, ga.last_washed_on,
+                ga.purchased_on, UseInCombo.use_name,
+                ga.garment_image_url, UseInCombo.field_in_db, gb.brand_name
+                ).from_statement(
+                        text(query)
+                ).all()
+    else:
+        results = session.query(
+                ga.garment_id, gt.type_id, gt.type_name,
+                ga.garment_color, gt.use_in_combo_as,
+                ga.garment_secondary_color, ga.last_washed_on,
+                ga.purchased_on, UseInCombo.use_name,
+                ga.garment_image_url, UseInCombo.field_in_db
+                ).from_statement(
+                        text(query)
+                ).all()
+    session.close()
+    for item in results:
+        garment_id, use_name, field_in_db = item[0], item[8], item[10]
+        use_string = '{} = {}'.format(field_in_db, garment_id)
+        if use_name == 'upper_ext_id':
+            use_string += ' OR upper_int_id = {0} \
+                    OR upper_cov_id = {0}'.format(garment_id)
+        elif use_name == 'upper_cov_id':
+            use_string += ' OR upper_ext_id = {}'.format(garment_id)
+        elif use_name == 'upper_int_id':
+            use_string += ' OR upper_ext_id = {}'.format(garment_id)
+        last_five_uses = get_last_uses(use_string, count_max=5)
+        last_washed_on = item[6].strftime("%Y-%m-%d")
+        uses_since_washed = len(get_last_uses(use_string, last_washed_on))
+        items_list = items.get(use_name, [])
+        items_list.append(dict(
+                garment_id=garment_id,
+                type_id=item[1],
+                type_name=item[2],
+                garment_color='#{}'.format(item[3]),
+                use_id=item[4],
+                garment_secondary_color='#{}'.format(item[5]),
+                last_five_uses=last_five_uses,
+                uses_since_washed=uses_since_washed,
+                last_washed_on=last_washed_on,
+                purchase_date=item[7].strftime("%Y-%m-%d"),
+                use_name=use_name,
+                garment_image_url='{}{}'.format(
+                        app.config['IMAGE_SOURCE_PATH'], item[9]
+                        ),
+                brand_name=item[11] if branded else ''
+                ))
+        items[use_name] = items_list
+    return items
+
+
 def transform_request_form(contents):
     print contents[22:-9]
     input_data = json.loads(contents[22:-9])
     return input_data
+
+
+@app.route('/garments/toWash', methods=['GET'])
+@swag_from('docs/get_garments_to_wash.yml')
+def get_garments_to_wash():
+    global engine
+    if engine is None:
+        engine = connect_db()
+    session = get_db()
+    items = []
+    query = "select \
+            g.garment_id, g.garment_image_url, \
+            g.last_washed_on, \
+            gt.use_in_combo_as, g.garment_color, g.garment_secondary_color,\
+            uc.use_name, uc.field_in_db \
+            from garment g join garment_type gt on \
+                    g.garment_type_id=gt.type_id \
+            join use_in_combo uc on gt.use_in_combo_as=uc.use_in_combo_id \
+            where g.available=1 \
+            order by use_in_combo_as"
+    ga = aliased(Garment)
+    results = session.query(
+            ga.garment_id, ga.last_washed_on,
+            UseInCombo.use_name,
+            ga.garment_image_url, UseInCombo.field_in_db
+            ).from_statement(
+                    text(query)
+            ).all()
+    session.close()
+    for item in results:
+        garment_id, use_name, field_in_db = item[0], item[2], item[4]
+        use_string = '{} = {}'.format(field_in_db, garment_id)
+        if use_name == 'upper_ext_id':
+            use_string += ' OR upper_int_id = {0} \
+                    OR upper_cov_id = {0}'.format(garment_id)
+        elif use_name == 'upper_cov_id':
+            use_string += ' OR upper_ext_id = {}'.format(garment_id)
+        elif use_name == 'upper_int_id':
+            use_string += ' OR upper_ext_id = {}'.format(garment_id)
+        last_washed_on = item[1].strftime("%Y-%m-%d")
+        uses_since_washed = len(get_last_uses(use_string, last_washed_on))
+        items.append(dict(
+                garment_id=garment_id,
+                uses_since_washed=uses_since_washed,
+                last_washed_on=last_washed_on,
+                use_name=use_name,
+                garment_image_url='{}{}'.format(
+                        app.config['IMAGE_SOURCE_PATH'], item[3]
+                        )
+                ))
+    sorted_items = sorted(items, key=lambda x: x['uses_since_washed'], reverse=True)
+    return jsonify({
+            'results': sorted_items,
+            'message': 'Found {} entries.'.format(len(sorted_items))
+            })
+
 
 
 @app.route('/garments', methods=['GET'])
@@ -189,9 +322,16 @@ def get_garments():
     global engine
     if engine is None:
         engine = connect_db()
+    branded_garments = get_all_garments(get_db(), True)
+    brandless_garments = get_all_garments(get_db(), False)
     garments = []
-    garments.extend(get_all_garments(get_db(), True))
-    garments.extend(get_all_garments(get_db(), False))
+    response_uses = get_uses_in_combos()
+    uses = json.loads(response_uses[0].data)
+    for use in uses.get('results', []):
+        use_name = use.get('use_name', None)
+        if use_name is not None:
+            garments.extend(branded_garments.get(use_name, []))
+            garments.extend(brandless_garments.get(use_name, []))
     if len(garments) == 0:
         return jsonify({'message': 'No entries here so far'})
     else:
