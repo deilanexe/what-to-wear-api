@@ -1,17 +1,21 @@
 import os
-from wtwapi.config import config
-from wtwapi import wtwapi
+import sys
 import json
 import unittest
 import tempfile
 from datetime import datetime
+# Change next path to the one where API is located
+sys.path.append(os.path.abspath("E:\Code\python\what-to-wear-api\wtwapi"))
+from wtwapi.config import config
+from wtwapi import wtwapi
+
 
 class wtwapiTestCase(unittest.TestCase):
 
     def setUp(self):
         with wtwapi.app.app_context():
             self.app = wtwapi.app.test_client()
-            wtwapi.app.config.from_object(config.TestConfig)
+            wtwapi.app.config.from_object(config.DevConfig)
             wtwapi.init_db()
 
     def tearDown(self):
@@ -55,6 +59,7 @@ class wtwapiTestCase(unittest.TestCase):
             rv = self.app.get('/brands')
             assert b'No entries here so far' in rv.data
             rmess = self.add_brand(wiki_article='')
+            print rmess.data
             assert rmess.status_code == 201
             rv2 = self.app.get('/brands')
             assert b'Found 1 entries' in rv2.data
@@ -65,6 +70,7 @@ class wtwapiTestCase(unittest.TestCase):
             rv = self.app.get('/brands')
             assert b'No entries here so far' in rv.data
             rmess = self.add_brand(brand_name=None)
+            print '\n{}\n'.format(rmess.status_code)
             assert rmess.status_code == 200
             rv2 = self.app.get('/brands')
             assert b'No entries here so far' in rv.data
