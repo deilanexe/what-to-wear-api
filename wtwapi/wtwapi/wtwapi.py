@@ -436,7 +436,7 @@ def update_garment(garment_id):
     if engine is None:
         engine = connect_db()
     session = get_db()
-    input_data = transform_request_form(str(request.form))
+    input_data = transform_request_form(request.data, request.form)
     print input_data
     last_washed_date = input_data.get(
             'last_washed_on', datetime.today().strftime("%Y-%m-%d")
@@ -579,7 +579,7 @@ def add_garment_type():
     if engine is None:
         engine = connect_db()
     try:
-        input_data = transform_request_form(str(request.form))
+        input_data = transform_request_form(request.data, request.form)
         type_name = input_data.get('type_name', None)
         type_description = input_data.get('type_description', '')
         use_in_combo_as = input_data.get('use_id', 0)
@@ -820,7 +820,7 @@ def add_combo():
         engine = connect_db()
     try:
         # print str(request.form)
-        input_data = transform_request_form(str(request.form))
+        input_data = transform_request_form(request.data, request.form)
         used_on = input_data.get('combo_date', None)
         head_id = input_data.get('head_id', 0)
         upper_cov_id = input_data.get('upper_cov_id', 0)
@@ -857,6 +857,7 @@ def add_combo():
                 'message': 'ERROR: Combo date not provided!', 'status': 200
                 }), 200
     except Exception as e:
+        print str(e)
         return jsonify({
                 'message': 'ERROR: Something strange happened!!!',
                 'status': 200
